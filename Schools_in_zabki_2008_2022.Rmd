@@ -1,0 +1,256 @@
+---
+title: "Schools in Ząbki 2008-2022"
+author: "Katarzyna Piechocka"
+date: "2023-12-28"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## The problem - Primary Schools in Ząbki
+
+The question is - do we need additional Primary Schools in Ząbki? If so - will building one school will be enough, or should we already plan next investments in coming years.
+
+I know the problem from my own experience, that as many growing towns in suburb of Warsaw (and Warsaw as well), Ząbki urgently need more primary schools. Already existing one are already working on two or three shifts.
+
+But lets focus on the data we have available:
+  * number of students in Primary Schools in Ząbki (uczniowie)
+  * number of classes in Primary Schools in Ząbki (oddziały)
+  * number of Primary Schools in Ząbki (szkoły)
+  * number of children up to 14 years old (in Poland, Primary Schools are for children 7-14 years old )
+
+All data are shown for years 2008-2022
+
+How will we answer the question:
+  * Analysis of growing number of students in Ząbki primary schools (summarizing with grammar scholls which were closed due to reform of education system in Poland)
+  * Analysis of number of classes (oddziały) and schools
+  * Analysys of number of children population in Ząbki
+
+## Data sources
+
+This analysis was based on official open source data from GUS (Statistics Poland https://api.stat.gov.pl/Home/BdlApi?lang=en). Data collected using API BDL.
+
+## Installing additional packages
+
+To be able to retrieve necessary data from GUS I needed additional tools in R - I found and installed R_Package_to_API_BDL created by Polish statistician. 
+
+Full documentation available in GitGub:
+https://github.com/statisticspoland/R_Package_to_API_BDL
+
+For analysis purposes popular R Packages and libraries will be installed: tidyverse, ggplot2. 
+
+```{r Installing BDL API package, echo=TRUE, message=FALSE, warning=FALSE}
+# Installing the packages 
+#install.packages("C:\Users\katar\Downloads\bdl_1.0.5.zip", repos = NULL, type = "source")
+#install.packages("patchwork")
+
+# Loading libraries
+library(bdl)
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+
+```
+
+## Checking structure od GUS data, sellecting correct codes for location and variables.
+
+Looking for location code of Ząbki and for variables concerning schools, and children population
+
+```{r pressure, echo=TRUE}
+# Searching for location code of Ząbki
+search_units('ząbki')
+search_unit_localities('ząbki')
+
+# Searching for variable (codes) concerning schools in Zabki (regular Primary Schools)
+szkoly <- data.frame(search_variables('szkoły'))
+head(szkoly)
+
+# Searching for variable - population data concerning children under 14 years old
+wiek_14_lat_i_mniej <- search_variables('14 lat i mniej')
+head(wiek_14_lat_i_mniej)
+
+```
+
+Variable and Location Id we will be working with:
+  * unit id for Ząbki - **071412934031**
+  * localities id for Ząbki - **071412934031-0921958**
+  * number of students - sum of two variables
+    * students of primary schools - **862**
+    * students of grammar schools - **2394**
+  * number of schools - sum of two variables
+    * number of primary schools - **838**
+    * number of grammar schools - **2370**
+  * number of classes (oddziały) - sum of two variables
+    * number of classes in primary schools - **854**
+    * number of classes in grammar schools - **2412**
+  * population of children under 14 years old - **72291**
+
+## Collecting data
+
+All data were collected directly from GUS BDL API. Data collection step by step - a variable at time.
+
+Later on single data frame with values of all variables will be created.
+
+```{r data collection, echo=TRUE, message=FALSE, warning=FALSE}
+# Students of primary schools
+uczniowie <- data.frame(get_data_by_unit_locality(unitId = "071412934031-0921958", varId = 862))
+head(uczniowie)
+
+# Students of grammar schools
+uczniowie_gim <- data.frame(get_data_by_unit_locality(unitId = "071412934031-0921958", varId = 2394))
+head(uczniowie_gim)
+
+# Number of primary schools
+szkoly <- data.frame(get_data_by_unit_locality(unitId = "071412934031-0921958", varId = 838))
+head(szkoly)
+
+# Number of grammar schools
+szkoly_gim <- data.frame(get_data_by_unit_locality(unitId = "071412934031-0921958", varId = 2370))
+head(szkoly_gim)
+
+# Number of classes in primary schools
+oddziały <- data.frame(get_data_by_unit_locality(unitId = "071412934031-0921958", varId = 854))
+head(oddziały)
+
+# Number of classes in grammar schools
+szkoly_gim_oddz <- data.frame(get_data_by_unit_locality(unitId = "071412934031-0921958", varId = 2412))
+head(szkoly_gim_oddz)
+
+# Population of children under up to 14 years old in Ząbki
+lud_do14_kraj1 <- get_data_by_variable(varId = 72291)
+head(lud_do14_kraj1)
+
+```
+
+Other method of data collection, all variables in a single data frame. I have decided not to use it in this analysis
+
+```{r collecting data - second method, message=FALSE, warning=FALSE}
+dane <- data.frame(get_data_by_unit_locality(unitId = "071412934031-0921958", varId = c(862,2394,838,2370,854,2412)))
+head(dane)
+```
+## Filtering population data
+
+Creating dataframe with children population data in Ząbki
+
+```{r Filtering population data, echo=TRUE, message=FALSE, warning=FALSE}
+do_14_lat_zabki <- filter(lud_do14_kraj1, name == 'Ząbki' )
+head(do_14_lat_zabki)
+```
+
+
+## Changing column names for more clarity
+
+To make sure that data will be readable after joining data, I have decided to change column names to more meaningful.
+
+```{r changing column names, echo=TRUE, message=FALSE, warning=FALSE}
+uczniowie <- rename(uczniowie, students_primary_no = val)
+uczniowie_gim <- rename(uczniowie_gim, students_grammar_no = val)
+oddziały <- rename(oddziały, classes_primary = val)
+szkoly_gim_oddz <- rename(szkoly_gim_oddz, classes_grammar = val)
+szkoly <- rename(szkoly, primary_schools = val)
+szkoly_gim <- rename(szkoly_gim, grammar_schools = val)
+do_14_lat_zabki <- rename(do_14_lat_zabki, children_to_14 = val)
+
+```
+
+## Creating single data frame - joining and selecting data
+
+To make analysis easier, and data more readable I have joined all data into single data frame, and later on created new short data frame with only years and values.
+
+```{r joins, echo=TRUE, message=FALSE, warning=FALSE}
+df= szkoly%>% 
+  left_join(szkoly_gim,by="year")%>%
+  left_join(oddziały,by="year")%>%
+  left_join(szkoly_gim_oddz, by="year")%>%
+  left_join(uczniowie, by="year")%>%
+  left_join(uczniowie_gim, by="year")%>%
+  left_join(do_14_lat_zabki, by="year")
+```
+
+Using select to create shorter, easy to read data frame.
+
+```{r select, echo=TRUE, message=FALSE, warning=FALSE}
+df_short <- df %>% select(year, primary_schools, grammar_schools, classes_primary, classes_grammar, students_primary_no, students_grammar_no, children_to_14)
+head(df_short)
+```
+## Data cleaning and transformation
+
+Checking statistics on the collected data
+
+```{r statistics, echo=TRUE, message=FALSE, warning=FALSE}
+# Statistics
+str(df_short)
+summary(df_short)
+
+# Replacing NaN with 0
+df_short[is.na(df_short)] <- 0
+
+```
+Last school opening in Ząbki took place actually in 2020 year, in 2017-2019 previously grammar schools became part of two primary schools (in separate buildings), additionally new opened in 2020 school also became part of one of existing ones.
+As an additional remark - one of grammar schools was organized together with primary school - in statistics the same school was counted twice.
+Numbers of schools need to be adjusted, to remove biases.
+
+Creating additional column with number of external branches per year.
+
+```{r message=FALSE, warning=FALSE}
+external_branch <- c(-1,-1,-1,-1,-1,-1,-1,-1,-1,2,2,2,1,0,0)
+df_short$external_branch <- external_branch
+```
+
+Calculating summarized data:
+  * total number of students
+  * total number of schools
+  * total number of classes
+  * average number of students per class
+  * average number students per school
+  * average number classes per school
+  
+```{r calculations, echo=TRUE, message=FALSE, warning=FALSE}
+df_short$total_students <- df_short$students_primary_no+df_short$students_grammar_no
+df_short$total_schools <- df_short$primary_schools+df_short$grammar_schools+df_short$external_branch
+df_short$total_classes <- df_short$classes_primary+df_short$classes_grammar
+df_short$average_students_per_class <- df_short$total_students/df_short$total_classes
+df_short$average_students_per_school <- df_short$total_students/df_short$total_schools
+df_short$average_classes_per_school <- df_short$total_classes/df_short$total_schools
+tail(df_short, 10)
+
+```
+
+## Data vizualisations
+
+Growing number of children population in Ząbki is strictly corelated with number of students in primary schools. Additionally number both of children and students of primary schools is constantly growing.
+
+```{r plots 1, echo=TRUE, message=FALSE, warning=FALSE}
+p1 <- ggplot(df_short, mapping = aes(x=children_to_14, y=total_students))+geom_point()+geom_smooth()+labs(x="Population of children up to 14 years old", y="Total number of students", title="Number of children vs students", caption = "Data by GUS - Polish Statistics")
+
+ggplot(df_short, mapping = aes(x=year, y=total_students))+geom_col(fill='navy')+labs(x="Years", y="Total number of students", title="Number of students over the years", caption = "Data by GUS - Polish Statistics")
+
+ggplot(df_short, mapping = aes(x=year, y=children_to_14))+geom_col(fill='navy')+labs(x="Years", y="Population of children up to 14 years old", title="Population over the years", caption = "Data by GUS - Polish Statistics")
+
+
+```
+It is time to plot average values, to see how looks like number of students per class and number of classes per school.
+
+```{r plots 2, echo=TRUE, message=FALSE, warning=FALSE}
+ggplot(df_short, mapping = aes(x=year, y=total_schools))+geom_col(fill='navy')+labs(x="Years", y="Total number of schools", title="Total number of primarry and grammar schools", caption = "Data by GUS - Polish Statistics")
+
+ggplot(df_short, mapping = aes(x=year, y=average_classes_per_school))+geom_col(fill='navy')+labs(x="Years", y="Average number of classes per school", title="Growing number classes per school", caption = "Data by GUS - Polish Statistics")
+
+ggplot(df_short, mapping = aes(x=year, y=average_students_per_school))+geom_col(fill='navy')+labs(x="Years", y="Average number of students per school", title="Growing number of students per school", caption = "Data by GUS - Polish Statistics")
+
+ggplot(df_short, mapping = aes(x=year, y=average_students_per_class))+geom_col(fill='navy')+labs(x="Years", y="Average number of students per class", title="Number of students per class", caption = "Data by GUS - Polish Statistics")
+
+
+
+```
+
+ ## The answer
+ 
+Due to constantly growing population of children in Ząbki, and in result growing number of students, town authorities should take necessary steps to build next primary school, and be ready to build next ones.
+
+As we can notice after small drop in 2020, when new school was opened, number of classes per school is constantly growing, with slightly growing number of students per class. What is very important, average number of classes per school is significantly higher than in 2008, what most likely mean that all schools are already overloaded.
+
+To be able to prepare more precise analysis it would be required to check chow number of classrooms have changed overtime. Unfortunately those data were incomplete in GUS database.
